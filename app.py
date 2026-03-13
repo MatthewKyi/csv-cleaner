@@ -2,6 +2,8 @@ from flask import Flask, request, send_file
 import pandas as pd
 from io import BytesIO
 import os
+import csv
+import re
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -20,18 +22,24 @@ def _get_bool_option(name: str, default: bool) -> bool:
 
     return str(value).lower() in {"1", "true", "yes", "on"}
 
+
+def normalize_header(header: str) -> str:
+    header = header.strip().lower()
+    header = re.sub(r"[^\w\s]", "", header)
+    header = re.sub(r"\s+", "_", header)
+    return header
+
+
 @app.route("/")
 def health():
     return {"status": "CSV Cleaner API running"}
+
 
 @app.route("/process", methods=["POST"])
 def process():
 
     if "file" not in request.files:
         return {"error": "No file uploaded"}, 400
-
-    if len(df) > 500000:
-        return {"error": "CSV too large"}, 400
 
     file = request.files["file"]
 
@@ -45,17 +53,45 @@ def process():
     remove_empty_rows = _get_bool_option("remove_empty_rows", default=True)
     drop_rows_with_missing = _get_bool_option("drop_rows_with_missing", default=False)
     strip_whitespace = _get_bool_option("strip_whitespace", default=True)
+    normalize_headers = _get_bool_option("normalize_headers", default=False)
 
     try:
-        df = pd.read_csv(file, skip_blank_lines=False)
+        raw = file.read()
+        df = None
+
+        for encoding in ["utf-8", "latin-1"]:
+            try:
+                sample = raw[:5000].decode(encoding, errors="ignore")
+                dialect = csv.Sniffer().sniff(sample)
+                delimiter = dialect.delimiter
+
+                df = pd.read_csv(
+                    BytesIO(raw),
+                    delimiter=delimiter,
+                    encoding=encoding,
+                    skip_blank_lines=False
+                )
+                break
+            except Exception:
+                df = None
+
+        if df is None:
+            return {"error": "Could not parse CSV"}, 400
+
     except Exception:
         return {"error": "Invalid CSV format"}, 400
+
+    if len(df) > 500000:
+        return {"error": "CSV too large"}, 400
 
     original_rows = len(df)
 
     if strip_whitespace:
         df.columns = df.columns.str.strip()
         df = df.apply(lambda col: col.str.strip() if col.dtype == "object" else col)
+
+    if normalize_headers:
+        df.columns = [normalize_header(col) for col in df.columns]
 
     duplicates_removed = 0
     if remove_duplicates:
@@ -73,14 +109,6 @@ def process():
         df = df.dropna(how="any")
 
     cleaned_rows = len(df)
-
-    print(
-        f"Rows: {original_rows} | "
-        f"Duplicates removed: {duplicates_removed} | "
-        f"Empty rows removed: {empty_rows_removed} | "
-        f"Rows with missing values removed: {rows_with_missing_removed} | "
-        f"Remaining rows: {cleaned_rows}"
-    )
 
     output = BytesIO()
     df.to_csv(output, index=False)
