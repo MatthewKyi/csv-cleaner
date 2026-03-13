@@ -1,6 +1,7 @@
 from flask import Flask, request, send_file
 import pandas as pd
 from io import BytesIO
+import os
 
 app = Flask(__name__)
 
@@ -86,4 +87,4 @@ def process():
 
 
 if __name__ == "__main__":
-    app.run(port=5001)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5001)))
