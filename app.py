@@ -2,8 +2,10 @@ from flask import Flask, request, send_file
 import pandas as pd
 from io import BytesIO
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
@@ -18,12 +20,18 @@ def _get_bool_option(name: str, default: bool) -> bool:
 
     return str(value).lower() in {"1", "true", "yes", "on"}
 
+@app.route("/")
+def health():
+    return {"status": "CSV Cleaner API running"}
 
 @app.route("/process", methods=["POST"])
 def process():
 
     if "file" not in request.files:
         return {"error": "No file uploaded"}, 400
+
+    if len(df) > 500000:
+        return {"error": "CSV too large"}, 400
 
     file = request.files["file"]
 
@@ -47,7 +55,7 @@ def process():
 
     if strip_whitespace:
         df.columns = df.columns.str.strip()
-        df = df.applymap(lambda value: value.strip() if isinstance(value, str) else value)
+        df = df.apply(lambda col: col.str.strip() if col.dtype == "object" else col)
 
     duplicates_removed = 0
     if remove_duplicates:
