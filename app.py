@@ -30,13 +30,13 @@ def normalize_header(header: str) -> str:
     return header
 
 
-@app.route('/', methods=['GET'])
+@app.route("/")
 def health():
-    return "OK", 200
+    return {"status": "CSV Cleaner API running"}
 
-@app.get("/")
-def health():
-    return {"status": "OK"}
+@app.route('/ping', methods=['GET'])
+def ping():
+    return "OK", 200
 
 
 @app.route("/process", methods=["POST"])
