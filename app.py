@@ -31,11 +31,11 @@ def normalize_header(header: str) -> str:
 
 
 @app.route('/', methods=['GET'])
-def ping():
+def health():
     return "OK", 200
 
 @app.get("/")
-def ping():
+def health():
     return {"status": "OK"}
 
 
